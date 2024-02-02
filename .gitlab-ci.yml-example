@@ -1,0 +1,43 @@
+default:
+  tags:
+    - php81
+    - composer
+
+variables:
+  COMPOSER_MEMORY_LIMIT: -1
+
+test-stage:
+  stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^master$/
+      when: never
+  script:
+    - 'composer install --no-cache --optimize-autoloader'
+    - 'php artisan test'
+
+deploy-staging:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^staging$/
+  variables:
+    APP_ENV: prod
+  script:
+    - 'composer install --no-cache --optimize-autoloader'
+    - 'printf "Commit: %s\nDescription\n%s\n" "${CI_COMMIT_SHORT_SHA}" "${CI_COMMIT_DESCRIPTION}" > VERSION'
+    - 'bsdtar -cJf "${CI_PROJECT_NAME}.tar.xz" --uid 80 --gid 80 --no-xattrs --exclude "${CI_PROJECT_NAME}.tar.xz" --exclude ".git" --exclude "node_modules" ./'
+    - 'scp "${CI_PROJECT_NAME}.tar.xz" releaser@${STAGING_HOST}:/home/releaser/${CI_PROJECT_NAME}.txz'
+    - 'ssh releaser@${STAGING_HOST} sudo /usr/local/bin/release install "/home/releaser/${CI_PROJECT_NAME}.txz"'
+
+deploy-prod:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^prod$/
+  variables:
+    APP_ENV: prod
+  script:
+    - 'composer install --no-cache --no-dev --optimize-autoloader'
+    - 'printf "Commit: %s\nDescription\n%s\n" "${CI_COMMIT_SHORT_SHA}" "${CI_COMMIT_DESCRIPTION}" > VERSION'
+    - 'bsdtar -cJf "${CI_PROJECT_NAME}.tar.xz" --uid 80 --gid 80 --no-xattrs --exclude "${CI_PROJECT_NAME}.tar.xz" --exclude ".git" --exclude "node_modules" ./'
+    - 'scp "${CI_PROJECT_NAME}.tar.xz" releaser@${PROD_HOST}:/home/releaser/${CI_PROJECT_NAME}.tar.xz'
+    - 'ssh releaser@${PROD_HOST} sudo /usr/local/bin/release install "/home/releaser/${CI_PROJECT_NAME}.tar.xz"'
+
